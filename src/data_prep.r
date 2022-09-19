@@ -3,16 +3,18 @@ datadir <- "../data/"
 
 # setup the libraries
 # Install
-install.packages( "tm" )  
-install.packages( "plyr" )  
-install.packages( "textstem" )  
-install.packages( "cld3" )
+#install.packages( "tm" )  
+#install.packages( "plyr" )  
+#install.packages( "textstem" )  
+#install.packages( "cld3" )
+#install.packages( "qdapRegex" )
 
 # Load
 library( tm )
 library( plyr )
 library(textstem)
 library( cld3 )
+library( qdapRegex )
 
 # set the working directory where your data is
 setwd( datadir )
@@ -55,11 +57,28 @@ tweets$tweet <- gsub(paste0('\\b',tm::stopwords("english"), '\\b', collapse = '|
 # url pattern for removal
 url_pattern <- "://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
 
-# remove  special characters
+# remove urls
 tweets$tweet <- gsub( url_pattern, "", tweets$tweet ) # strip everything after http(s)
-tweets$tweet <- gsub("[^[:alpha:]]+", " ", tweets$tweet ) # remove special characters and numbers
-tweets$tweet <- gsub('\\b\\w{1,2}\\b','', tweets$tweet) # remove any word under 3 characters
+
+# remove hashtags and save to new field
+tweets$tweet_orig <- tweets$tweet
+tweets$tweet <- rm_hash( tweets$tweet_orig )
+tweets$hashtag <- ex_hash( tweets$tweet_orig )
+
+# remove  special characters
+tweets$tweet <- gsub("[^[:alpha:]]+", " ", tweets$tweet ) 
+tweets$tweet_orig <- gsub("[^[:alpha:]]+", " ", tweets$tweet_orig )
+tweets$hashtag <- gsub("[^[:alpha:]]+", " ", tweets$hashtag )
+
+# remove any word under 3 characters 
+# (hashtag is included to remove 'c' that remained when the list was converted to char data)
+tweets$tweet <- gsub('\\b\\w{1,2}\\b','', tweets$tweet) 
+tweets$tweet_orig <- gsub('\\b\\w{1,2}\\b','', tweets$tweet_orig) 
+tweets$hashtag <- gsub('\\b\\w{1,2}\\b','', tweets$hashtag) 
+
+#stem the words (not the hashtags)
 tweets$tweet <- lemmatize_words(tweets$tweet)
+tweets$tweet_orig <- lemmatize_words(tweets$tweet_orig)
 
 # add columns noting if the tweet text contained a web link and an ssl web link
 tweets$link <- grepl( "http", tweets$tweet, fixed = TRUE )
@@ -67,3 +86,10 @@ tweets$ssl_link <- grepl( "https", tweets$tweet, fixed = TRUE )
 
 # output dataframe to csv
 write.csv( tweets, "tweets_prepped.csv", row.names = FALSE )
+
+# remove http and https terms from the tweets
+tweets$tweet <- gsub('\\b\\http[s]?\\b','', tweets$tweet)
+tweets$tweet_orig <- gsub('\\b\\http[s]?\\b','', tweets$tweet_orig)
+
+# output dataframe to csv
+write.csv( tweets, "tweets_prepped_no_http.csv", row.names = FALSE )

@@ -1,10 +1,13 @@
 ---
 title: "Tweet Feature Extraction"
 author: "Ada Lazuli"
-date: '2022-07-17'
-output: 
+date: "2022-07-17"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
   html_document:
-    toc: true
+    toc: yes
     toc_depth: 2
     code_folding: show
 ---
@@ -17,7 +20,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
-library(DT)
 library(stringr)
 library(tidytext)
 library(forcats)
@@ -29,8 +31,8 @@ library(textdata)
 Load the prepped data compiled by Winfrey Johnson.
 
 ```{r,  out.width = '100%', warning=FALSE, message=FALSE}
-df <- read.csv("../data/tweets_prepped.csv")
-datatable(df)
+df <- read.csv("../data/tweets_prepped_no_http.csv")
+glimpse(df)
 ```
 
 # Data Enrichment 
@@ -53,7 +55,9 @@ df <- df %>% mutate(length = nchar(tweet))
 Use `mutate` to find the http keyword in the tweet text then convert that logical to an integer.
 
 ```{r,  out.width = '100%', warning=FALSE, message=FALSE}
-df <- df %>% mutate(http = grepl("http", tweet)) %>% mutate(http = as.integer(http))
+df <- df %>%
+  mutate(http = grepl("http", tweet)) %>%
+  mutate(http = as.integer(http))
 ```
 
 ## Add Integer Sentiment
@@ -67,7 +71,11 @@ calc_afinn_sentiment <- function(df){
     # extract the row
     temp <- df[i,]
     # un nest the row to join with afinn then calculate the average sentiment
-    temp <- temp %>% unnest_tokens(word, tweet) %>% inner_join(get_sentiments("afinn"), by = "word") %>% group_by(label) %>% summarize(sentiment = mean(value))
+    temp <- temp %>% 
+      unnest_tokens(word, tweet) %>% 
+      inner_join(get_sentiments("afinn"), by = "word") %>% 
+      group_by(label) %>% 
+      summarize(sentiment = mean(value))
     # sometimes the sentiment is not returned if the intersection of the sets is empty, so check for this below
     if (length(temp$sentiment) > 0){
       df[i,]$sentiment_afinn <- temp$sentiment[1] 
@@ -96,7 +104,10 @@ find_nrc_sentiment <- function(df){
     # extract the row
     temp <- df[i,]
     # un nest the row to join with nrc then count the occurrences of each sentiment
-    temp <- temp %>% unnest_tokens(word, tweet) %>% inner_join(get_sentiments("nrc"), by = "word") %>% count(sentiment)
+    temp <- temp %>%
+      unnest_tokens(word, tweet) %>%
+      inner_join(get_sentiments("nrc"), by = "word") %>% 
+      count(sentiment)
     # sometimes the sentiment is not returned if the intersection of the sets is empty, so check for this below
     if (nrow(temp) > 0){
       for (x in 1:nrow(temp)){
@@ -114,8 +125,9 @@ df <- find_nrc_sentiment(df)
 Finally, save the enriched dataset as a CSV.
 
 ```{r}
-write.csv(df, "../data/enriched_tweet_data.csv")
-datatable(df)
+write.csv(df, "../data/enriched_tweet_data.csv", row.names = FALSE)
+
+glimpse(df)
 ```
 
 

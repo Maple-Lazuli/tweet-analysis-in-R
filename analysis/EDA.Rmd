@@ -1,10 +1,13 @@
 ---
 title: "Exploratory Data Analysis"
 author: "Ada Lazuli"
-date: '2022-07-09'
+date: "2022-07-09"
 output:
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
   html_document:
-    toc: true
+    toc: yes
     toc_depth: 2
     code_folding: show
 ---
@@ -231,7 +234,7 @@ ERNIE 2.0 performed very well and had an accuracy of __`r (sum((ernie$Model4_cla
 The data was cleaned and compiled into a single dataset provided by Winfrey "John" Johnson. 
 
 ```{r, out.width = '100%', warning=FALSE, message=FALSE}
-tweets <- read.csv("../data/tweets_prepped.csv")
+tweets <- read.csv("../data/tweets_prepped_no_http.csv")
 ```
 
 
@@ -260,8 +263,8 @@ It seems as though _fake_ tweets have a tendency for shorter tweets.
 ## Looking at URLs
 
 ```{r, out.width = '100%', warning=FALSE, message=FALSE}
-count_df <- tweets %>% filter(grepl('http', tweet)) %>% count(label) %>% inner_join(tweets %>% count(label), by = "label") %>% mutate(ratio = n.x/n.y)
-ggplot(count_df, aes(x = label, y = ratio, fill = label)) + geom_col(alpha = 0.3) + labs(title = "Normalized Comparison of URL Occurrences", x = "Label", y = "Percentage With URLs")
+#count_df <- tweets %>% filter(grepl('http', tweet)) %>% count(label) %>% inner_join(tweets %>% count(label), by = "label") %>% mutate(ratio = n.x/n.y)
+ggplot(tweets, aes(x = link, fill = label)) + geom_bar(alpha = 0.3, position = "dodge") + labs(title = "Comparison of URL Occurrences", x = "Label", y = "Number of URLs")
 ```
 
 It seems that URLs are significantly more common in _real_ tweets compared to _fake_ tweets,
@@ -364,6 +367,5 @@ Baidu Research. (2018). _Baidu's Optimized ERNIE Achieves State-of-the-Art Resul
 diptamath. (2021). _COVID19 Fake News Detection in English_. Retrieved from: https://github.com/diptamath/covid_fake_news
 
 Silge, J. & Robinson, D. (2022). _Sentiment analysis with tidy data_ . Retrieved from: https://www.tidytextmining.com/sentiment.html#the-sentiments-datasets
-
 
 

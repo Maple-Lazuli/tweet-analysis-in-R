@@ -1,17 +1,22 @@
 ---
 title: "Tweet Decision Tree"
 author: "Ada Lazuli"
-date: '2022-07-17'
+date: "2022-07-17"
 output:
-    html_document:
-    toc: true
-    toc_depth: 2
-    code_folding: show
+  pdf_document: default
+  toc: yes
+  toc_depth: 2
+  code_folding: show
+  html_document: null
 ---
 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r, out.width = '100%', warning=FALSE, collapse=TRUE, class.source = 'fold-hide'}
 library(tidymodels)
 library(rattle)
 library("ggfortify")
@@ -25,6 +30,9 @@ df <- read.csv("../data/enriched_tweet_data.csv")
 # convert the classes to factors
 df$X <- NULL
 df$tweet <- NULL
+df$tweet_orig <- NULL
+df$hashtag <-NULL
+df$link <- NULL
 df$label <- as.factor(df$label)
 data_partitioned <- initial_split(df, prop = 0.75, strata = label)
 train <- training(data_partitioned)
@@ -40,8 +48,11 @@ test <-  testing(data_partitioned)
 The first attempt involved using all of the available features and not specifying any limitations to the model. The tree is created using the `parsnip` package in `tidymodels`, with the _rpart_ engine and set for classification (Kuhn). The tree was fit on the data, using all of the available columns
 
 ```{r, out.width = '100%'}
-tree_template <- decision_tree() %>% set_engine("rpart") %>% set_mode("classification")
-tree_model <- tree_template %>% fit(formula = label ~ ., data =  train)
+tree_template <- decision_tree() %>% 
+  set_engine("rpart") %>%
+  set_mode("classification")
+tree_model <- tree_template %>% 
+  fit(formula = label ~ ., data =  train)
 fancyRpartPlot(tree_model$fit, caption = "First Decision Tree Attempt")
 ```
 
@@ -56,7 +67,8 @@ predictions <- predict(tree_model, test) %>% mutate(true = test$label)
 predictions_prob <- predict(tree_model, test, type = "prob") %>% bind_cols(test)
 accuracy(data = predictions, estimate = .pred_class, truth = true)
 conf_mat(data = predictions, estimate = .pred_class, truth = true)
-autoplot(roc_curve(data = predictions_prob, estimate = .pred_fake, truth = label)) + ggtitle("ROC For Tweets")
+autoplot(roc_curve(data = predictions_prob, estimate = .pred_fake, truth = label)) +
+  ggtitle("ROC For Tweets")
 print(roc_auc(data = predictions_prob, estimate = .pred_fake, truth = label))
 ```
 

@@ -1,0 +1,135 @@
+---
+title: "kmeans clustering"
+author: "Group 3"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library( tm )
+library( plyr )
+library(textstem)
+library( cld3 )
+library( ggplot2 )
+library( cluster )
+library(ggpubr)
+library(factoextra)
+library(tidyr)
+library(RColorBrewer)
+
+set.seed(1234)
+```
+
+
+## Load the data
+
+Load the tweet data into a data frame for processing and show a summary of the data.
+
+```{r tweets}
+setwd("../data/")
+tweets <- read.csv( "tweets_prepped_no_http.csv", header=TRUE, sep=",", as.is=FALSE )
+str(tweets)
+
+```
+
+## Create a Term Document Matrix for processing
+
+Create a term document matrix.
+
+```{r tdm}
+corpus <- Corpus(VectorSource(tweets$tweet))
+corpusCopy <- corpus
+tdm <- TermDocumentMatrix( corpus )
+inspect(tdm)
+```
+
+Create a document term matrix.
+
+```{r tmd}
+tmd <- DocumentTermMatrix( corpus )
+inspect(tmd)
+findFreqTerms(tmd, lowfreq=400)
+```
+
+Graph term frequency.
+
+```{r term frequency}
+termFrequency <- colSums(as.matrix(tmd))
+termFrequency <- subset(termFrequency, termFrequency>=400)
+df <- data.frame(term=names(termFrequency), freq=termFrequency)
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat="identity") + xlab("Terms") + ylab("Count") + coord_flip()
+
+```
+
+Transform the document term matrix into a matrix for clustering.
+
+```{r matrix}
+#tmd2 <- removeSparseTerms(tmd, sparse=0.95)
+tmd2 <- removeSparseTerms(tmd, sparse=0.99)
+m2 <- as.matrix(tmd2)
+
+```
+
+Determine value for k.
+
+```{r determine-k, }
+fviz_nbclust( m2, kmeans, method="wss", k.max=40 )
+
+#gap stat
+#gap_stat <- clusGap( m2, FUN = kmeans, 
+#                    K.max = 20, B = 6 )
+#fviz_gap_stat(gap_stat)
+
+# silhouette method
+#fviz_nbclust(m2, kmeans, method = "silhouette")
+
+```
+
+Generate k-means cluster.
+
+```{r k-means}
+
+#k <- 4
+#k <- 8
+k <- 11
+kmeansResult <- kmeans(m2, k)
+round(kmeansResult$centers, digits=3)
+```
+
+Look at top words in each cluster.
+
+```{r top-cluster-words}
+for (i in 1:k) {
+   cat(paste("cluster ", i, ":  ", sep=""))
+   s <- sort(kmeansResult$centers[i,], decreasing=T)
+   cat(names(s)[1:10], "\n")
+}
+```
+
+Look at top words in each cluster.
+
+```{r plot-cluster}
+clusplot(tweets, kmeansResult$cluster, color=TRUE, shade=FALSE, labels=1, lines=1)
+
+```
+
+Compare cluster predictions with actual comparisons.
+
+```{r table-cluster}
+table(tweets$label, kmeansResult$cluster)
+```
+
+Save the clustered groups to feed into the nnet program
+
+```{r print}
+setwd("../data/")
+enrichedTweeets <- read.csv( "enriched_tweet_data.csv", header=TRUE, sep=",", as.is=FALSE )
+i <- 1
+while (i <= k) {
+  clus <- enrichedTweeets[which(kmeansResult$cluster == i),]
+  write.csv( clus, paste("../data/enriched_tweet_data_", i, ".csv", sep=""), row.names = FALSE )
+  i = i+1
+}
+```

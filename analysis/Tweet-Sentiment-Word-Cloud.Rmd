@@ -1,0 +1,412 @@
+---
+title: "HJ_Eploratory"
+Name:  hasani jaali 
+Class:  Data 630 
+Prof:  Dr. Larson
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-07-12'
+---
+
+## Session Environment
+
+```{r}
+
+sessionInfo()
+
+```
+
+```{r}
+
+# Data Cleaning  #################
+# read in files and clean and prep data 
+
+#####################################
+
+
+# setup the libraries
+# Install
+#install.packages( "tm" )  
+#install.packages( "plyr" )  
+#install.packages( "textstem" )  
+#install.packages( "cld3" )
+#install.packages( "qdapRegex" )
+
+# Load
+library( tm )
+library( plyr )
+library(textstem)
+library( cld3 )
+library( qdapRegex )
+
+
+# define your data dir here (this assumes running from the src directory)  or skip to setwd
+## datadir <- "../data/" 
+
+# set the working directory 
+setwd("~/Desktop/Data_630/630 Group Project/Execricse")
+
+
+# read in the training data set
+tweets_train <- read.csv( "Constraint_Train.csv", header=TRUE, sep=",", as.is=FALSE )
+tweets_test <- read.csv( "english_test_with_labels.csv", header=TRUE, sep=",", as.is=FALSE )
+tweets <- rbind( tweets_train, tweets_test )
+
+# using the below function, we learn that there are 6420 observations with 
+# three columns:
+# 
+# id is of type int
+# tweets is of type factor with 6420  levels
+# label is a factor with 2 levels (fake, real)
+
+# convert tweet from factor to character type
+tweets$tweet <- as.character( tweets$tweet )
+
+# remove the id field
+tweets$id <- NULL
+
+# check for missing values.  if the sum of all of the missing values is zero, 
+# there are no missing values.  this dataset produces a sum of zero, 
+# so complete data with no missing data
+sum( is.na( tweets ) )
+
+# some summary info...  fake tweets: 3060, real tweets: 3360
+summary( tweets$label )
+
+# prep the data
+
+# to lower case
+tweets$tweet <- tolower( tweets$tweet )
+
+# remove stop words
+tweets$tweet <- gsub(paste0('\\b',tm::stopwords("english"), '\\b', collapse = '|'), '', tweets$tweet)
+
+# url pattern for removal
+url_pattern <- "://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+
+# remove urls
+tweets$tweet <- gsub( url_pattern, "", tweets$tweet ) # strip everything after http(s)
+
+# remove hashtags and save to new field
+tweets$tweet_orig <- tweets$tweet
+tweets$tweet <- rm_hash( tweets$tweet_orig )
+tweets$hashtag <- ex_hash( tweets$tweet_orig )
+
+# remove  special characters
+tweets$tweet <- gsub("[^[:alpha:]]+", " ", tweets$tweet ) 
+tweets$tweet_orig <- gsub("[^[:alpha:]]+", " ", tweets$tweet_orig )
+tweets$hashtag <- gsub("[^[:alpha:]]+", " ", tweets$hashtag )
+
+# remove any word under 3 characters 
+# (hashtag is included to remove 'c' that remained when the list was converted to char data)
+tweets$tweet <- gsub('\\b\\w{1,2}\\b','', tweets$tweet) 
+tweets$tweet_orig <- gsub('\\b\\w{1,2}\\b','', tweets$tweet_orig) 
+tweets$hashtag <- gsub('\\b\\w{1,2}\\b','', tweets$hashtag) 
+
+#stem the words (not the hashtags)
+tweets$tweet <- lemmatize_words(tweets$tweet)
+tweets$tweet_orig <- lemmatize_words(tweets$tweet_orig)
+
+# add columns noting if the tweet text contained a web link and an ssl web link
+tweets$link <- grepl( "http", tweets$tweet, fixed = TRUE )
+tweets$ssl_link <- grepl( "https", tweets$tweet, fixed = TRUE )
+
+# output dataframe to csv
+write.csv( tweets, "tweets_prepped.csv", row.names = FALSE )
+
+# remove http and https terms from the tweets
+tweets$tweet <- gsub('\\b\\http[s]?\\b','', tweets$tweet)
+tweets$tweet_orig <- gsub('\\b\\http[s]?\\b','', tweets$tweet_orig)
+
+# output dataframe to csv
+write.csv( tweets, "tweets_prepped_no_http.csv", row.names = FALSE )
+str(tweets)
+```
+
+```{r}
+
+# read file non http/s removed Hasani 
+library(tidyr)
+
+tweets <- read.csv( "tweets_prepped_no_http.csv", header=TRUE, sep=",", as.is=TRUE )
+
+# output dataframe to csv
+#write.csv(tweets, "hasanitweets_prepped.csv", row.names = FALSE )
+
+```
+
+## Sentiment Analysis
+
+## Sentiment analysis will be performed on both the Real and Real tweets. In use will be [Sentiment Analysis Reference](https://www.rdocumentation.org/packages/SentimentAnalysis/versions/1.3-4)
+
+```{r}
+
+citation("SentimentAnalysis")   # gives reference for the package
+
+library(SentimentAnalysis)
+library(ggplot2)
+library(dplyr)
+
+# set wseed to get same values each time 
+set.seed(1234)
+
+# Analyze sentiment
+tweets_sentiment <- analyzeSentiment(tweets[,1])
+
+
+x = as.data.frame(convertToDirection(tweets_sentiment$SentimentQDAP))
+colnames(x) <- c("sentiment")
+
+# merge tweets with its sentiment - using cbind - it is appending by row number
+tweets_merged_sentiment <- cbind(tweets,x)
+
+
+
+write.csv( tweets_merged_sentiment, "tweets_merged_sentiment.csv", row.names = FALSE )
+
+
+
+count_df <- tweets_merged_sentiment %>% count(label, sentiment) 
+
+# There are two rows where the tweet is empty after cleaning 
+count_df <- na.omit(count_df)
+count_df
+
+ggplot(count_df, aes(x = sentiment, y = n, fill = label)) + geom_col() + facet_wrap(~ label, scale = "free_y") + coord_flip() + labs(title = " Sentiment Analysis With SentimentAnalysis Package", x = "Sentiment", y ="Occurences")
+
+```
+
+For Real tweets above we see that negative sentiment is 32% and positive sentiment is 39%, only 7% difference. However for positive tweets negative sentiment is only 23% , however, positive sentiment is 59%.
+
+## Wordcloud of both fake & real tweets based on Sentiment
+
+```{r}
+options(repos="https://cran.rstudio.com" )   # Reaquired for R Markdown
+
+("RColorBrewer")  # brewer colors 
+library(RColorBrewer)
+
+#wordcloud 
+library("wordcloud")
+
+library("tidytext")  ##  unnest text etc. 
+
+is.atomic(tweets)  ## if False need $ to access variables 
+
+# Real tweet - filter negative & positive
+tweets_Fake_negative <- tweets_merged_sentiment %>% filter(label=="fake" & sentiment =="negative") %>% unnest_tokens(word,tweet)
+tweets_Fake_negative_count  <- tweets_Fake_negative %>% count(word) %>% arrange (desc(n))
+
+tweets_Fake_positive <- tweets_merged_sentiment %>% filter(label=="fake" & sentiment =="positive") %>% unnest_tokens(word,tweet)
+tweets_Fake_positive_count  <- tweets_Fake_positive %>% count(word) %>% arrange (desc(n))
+
+#Real tweet - filter negative & positive 
+tweets_Real_negative <- tweets_merged_sentiment %>% filter(label=="real" & sentiment =="negative") %>% unnest_tokens(word,tweet)
+tweets_Real_negative_count  <- tweets_Real_negative %>% count(word) %>% arrange (desc(n))
+
+tweets_Real_positive <- tweets_merged_sentiment %>% filter(label=="real" & sentiment =="positive") %>% unnest_tokens(word,tweet)
+tweets_Real_positive_count  <- tweets_Real_positive %>% count(word) %>% arrange (desc(n))
+
+```
+
+#### Word Cloud - Real vs Real Tweet - Negativity
+
+```{r fig2, fig.height = 5, fig.width = 5, fig.align = "center"}
+
+set.seed(1234) # for reproducibility 
+# set wordlcoud plot space
+layout(matrix(c(1, 2), nrow=2), heights=c(1, 4))
+par(mar=rep(0, 4))
+plot.new()
+
+##  
+text(x=0.3, y=0.3, "Fake Tweets Negative Sentiment")
+wordcloud(words = tweets_Fake_negative_count$word, freq = tweets_Fake_negative_count$n, min.freq = 1, max.words=20, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+
+
+# plot wordcloud for Real tweets - negative sentiment 
+plot.new()
+text(x=0.5, y=0.5, "Real Tweets Negative Sentiment")
+wordcloud(words = tweets_Real_negative_count$word, freq = tweets_Real_negative_count$n, min.freq = 1,max.words=20, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+
+
+
+```
+
+#### Word Cloud - Real vs Real Tweet - Positivity
+
+```{r fig2, fig.height = 5, fig.width = 5, fig.align = "center"}
+
+set.seed(1234) # for reproducibility 
+# set wordlcoud plot space
+layout(matrix(c(1, 2), nrow=2), heights=c(1, 4))
+par(mar=rep(0, 4))
+plot.new()
+
+text(x=0.3, y=0.3, "Fake Tweets Positive Sentiment")
+wordcloud(words = tweets_Fake_positive_count$word, freq = tweets_Fake_positive_count$n, min.freq = 1, max.words=20, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+
+
+# plot wordcloud for Real tweets - possitive sentiment 
+plot.new()
+text(x=0.5, y=0.5, "Real Tweets positive Sentiment")
+wordcloud(words = tweets_Real_positive_count$word, freq = tweets_Real_positive_count$n, min.freq = 1, max.words=20, random.order=FALSE, rot.per=0.35,colors=brewer.pal(8, "Dark2"))
+
+
+```
+
+# Creating a Corpus to be used for Network of terms
+
+```{r}
+# build a corpus and specify  the source to be character vectors -- Chapter 10
+myCorpus <- Corpus(VectorSource(tweets$tweet))
+head(myCorpus)
+myCorpus
+
+fake <- subset(tweets, label =="fake")
+real <- subset(tweets, label =="real")
+
+
+myCorpusFake <- Corpus(VectorSource(fake$tweet))
+myCorpusReal <- Corpus(VectorSource(real$tweet ))
+
+inspect(myCorpusFake[11:15])
+inspect(myCorpusReal[11:15])
+
+# build term Matrix 
+tdmFake <- TermDocumentMatrix(myCorpusFake)
+tdmFake
+idxFake <- which(dimnames(tdmFake)$Terms == "trump")
+inspect(tdmFake[idxFake +(0:5),101:110])
+
+tdmReal <- TermDocumentMatrix(myCorpusReal)
+tdmReal
+idxReal <- which(dimnames(tdmReal)$Terms == "cases")
+inspect(tdmReal[idxReal +(0:5),101:110])
+
+
+
+ ## give list the row names 
+
+# rownames(tdmFake) 
+# rownames(tdmReal) 
+
+# inspect frequent words
+findFreqTerms(tdmFake,lowfreq=400)
+findFreqTerms(tdmReal,lowfreq=400)
+
+
+#remove sparse terms   --- not needed because the matrix is no sparse
+tdm2Fake<-removeSparseTerms(tdmFake, sparse=0.95)
+tdm2Real<-removeSparseTerms(tdmReal, sparse=0.95)
+
+#head(tdm2)
+m2Fake <-as.matrix(tdm2Fake)
+m2Real <- as.matrix(tdm2Real)
+#head(m2Fake)
+#head(m2Real)
+```
+
+## Social Network, Build a Network of Terms Based on their co-occurence in tweets
+
+### Build a term-term matrix (see page 116) , where the rows and colums represent terms , and every entry is the number of concurrences of two terms.
+
+```{r}
+# Network of Terms  see page 115
+
+termDocMatrixFake<- m2Fake # see page 110 for m2
+
+##write.csv(m2[5:10,1:20], "termDocMatrix", row.names = FALSE )
+
+
+# inspect part of matrix
+termDocMatrixFake[5:10,1:20]
+
+# Change to Boolean Matrix
+termDocMatrixFake[termDocMatrix>=1] <-1
+
+#transform into a term-term adjacency matrix
+termMatrixFake <- termDocMatrixFake %*% t(termDocMatrixFake)
+
+# inspect terms numbered 5 to 10 
+termMatrixFake[5:10,5:10]
+
+
+
+```
+
+## Plot Network of Terms - Fake Tweets
+
+```{r}
+
+library(igraph)
+#build a graph from the above matrix 
+
+g <- graph.adjacency(termMatrixFake, weighted=T,  mode="undirected")
+
+#remove loops
+g <- simplify(g)
+
+#set labels and degrees of vertices
+     V(g)$label <- V(g)$name
+     V(g)$degree <- degree(g)
+
+#set seed to make the layout reproducible
+set.seed(1234)
+layout1 <- layout.fruchterman.reingold(g)
+plot(g, layout=layout1, main = " A Network of Terms - Fake Tweets")
+
+
+```
+
+## Network of Terms - Real Tweets
+
+```{r}
+# Network of Terms  see page 115
+
+termDocMatrixReal<- m2Real # see page 110 for m2
+
+##write.csv(m2[5:10,1:20], "termDocMatrix", row.names = FALSE )
+
+
+# inspect part of matrix
+termDocMatrixReal[5:10,1:20]
+
+# Change to Boolean Matrix
+termDocMatrixReal[termDocMatrix>=1] <-1
+
+#transform into a term-term adjacency matrix
+termMatrixReal <- termDocMatrixReal %*% t(termDocMatrixReal)
+
+# inspect terms numbered 5 to 10 
+termMatrixReal[5:10,5:10]
+
+
+```
+
+## Network of Tweets - Real Tweets
+
+```{r}
+
+library(igraph)
+#build a graph from the above matrix 
+
+g <- graph.adjacency(termMatrixReal, weighted=T,  mode="undirected")
+
+#remove loops
+g <- simplify(g)
+
+#set labels and degrees of vertices
+     V(g)$label <- V(g)$name
+     V(g)$degree <- degree(g)
+
+#set seed to make the layout reproducible
+set.seed(1234)
+layout1 <- layout.fruchterman.reingold(g)
+plot(g, layout=layout1, main = " A Network of Terms - Real Tweets")
+
+
+```
+
+\`\`\`

@@ -1,0 +1,165 @@
+---
+title: "Neural-network (nnet) Tweet Analysis"
+author: "Group 3"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library( nnet )
+library( ggplot2 )
+library( dplyr )
+library ("NeuralNetTools")
+require(caret)
+require(e1071)
+library("devtools")
+library("ROCR")
+
+set.seed(1234)
+```
+
+
+## Load the data
+
+Load the tweet data into a data frame for processing and show a summary of the data.
+
+```{r load}
+setwd("../data/")
+tweets <- read.csv( "enriched_tweet_data.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_1.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_2.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_3.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_4.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_5.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_6.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_7.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_8.csv", header=TRUE, sep=",", as.is=FALSE )
+#tweets <- read.csv( "enriched_tweet_data_9.csv", header=TRUE, sep=",", as.is=FALSE )
+str(tweets)
+
+```
+
+## Prep the data
+
+Make any formating decisions necessary to the data before generation of the model.
+
+```{r prep}
+#tweets$id <- NULL
+tweets$http <- as.factor(tweets$http)
+tweets$label_factor <- ifelse(tweets$label == 'real', 0, 1) 
+tweets$label_factor <- as.factor( tweets$label_factor )
+tweets$length <- scale(tweets$length)
+tweets$sentiment_afinn <- scale(tweets$sentiment_afinn)
+tweets$anger <- scale(tweets$anger)
+tweets$anticipation <- scale(tweets$anticipation)
+tweets$disgust <- scale(tweets$disgust)
+tweets$fear <- scale(tweets$fear)
+tweets$joy <- scale(tweets$joy)
+tweets$negative <- scale(tweets$negative)
+tweets$positive <- scale(tweets$positive)
+tweets$sadness <- scale(tweets$sadness)
+tweets$surprise <- scale(tweets$surprise)
+tweets$trust <- scale(tweets$trust)
+tweets$tweet <- NULL
+tweets$tweet_orig <- NULL
+tweets$hashtag <- NULL
+str(tweets)
+summary(tweets)
+
+```
+
+## Create the model
+
+Create the test and training datasets.
+
+```{r datasets}
+ind <- sample(2, nrow(tweets), replace = TRUE, prob = c(0.7, 0.3))
+train.data <- tweets[ind == 1, ]
+test.data <- tweets[ind == 2, ]
+```
+
+Create the neural network model.
+
+```{r model}
+nn <- nnet( label_factor~link+length+sentiment_afinn+anger+anticipation+disgust+fear+joy+negative+positive+sadness+surprise+trust, data = train.data, size=10, maxit=2000 )
+
+# explore the model
+names(nn)
+summary(nn)  
+```
+
+## Evaluate the model
+
+Visualize the neural net model
+
+```{r plots}
+plotnet(nn)
+garson(nn)  
+olden(nn)
+```
+
+Confusion matrices.
+
+```{r tables}
+mypredict<-predict(nn) # training
+mypredict<-apply(mypredict, c(1), round)            
+confusionMatrix(table(mypredict, train.data$label_factor, dnn=c("Predicted", "Actual")))
+
+testPred <- predict(nn, test.data) #test
+testPred<-apply(testPred, c(1), round)
+confusionMatrix(table(testPred, test.data$label_factor, dnn=c("Predicted", "Actual")))
+
+```
+
+ROC Curve to evaluate the model.
+
+```{r eval-curves}
+pred <- prediction( testPred, test.data$label_factor )
+perf_sn_sp = performance(pred, "sens", "spec")
+plot(perf_sn_sp)
+
+roc = performance(pred,"tpr","fpr")
+plot(roc, colorize = T, lwd = 2)
+abline(a = 0, b = 1) 
+
+auc = performance(pred, measure = "auc")
+print( auc@y.values )
+
+```
+
+
+```{r total_file}
+# only run when evaluating the entirety of the dataset against a model trained with a cluster
+runExtended <- FALSE
+if ( runExtended ) {
+  # run the new model on the full data set
+  setwd("../data/")
+  te <- read.csv( "enriched_tweet_data.csv", header=TRUE, sep=",", as.is=FALSE )
+  te$id <- NULL
+  te$http <- as.factor(te$http)
+  te$label_factor <- ifelse(te$label == 'real', 0, 1)
+  te$label_factor <- as.factor( te$label_factor )
+  te$length <- scale(te$length)
+  te$sentiment_afinn <- scale(te$sentiment_afinn)
+  te$anger <- scale(te$anger)
+  te$anticipation <- scale(te$anticipation)
+  te$disgust <- scale(te$disgust)
+  te$fear <- scale(te$fear)
+  te$joy <- scale(te$joy)
+  te$negative <- scale(te$negative)
+  te$positive <- scale(te$positive)
+  te$sadness <- scale(te$sadness)
+  te$surprise <- scale(te$surprise)
+  te$trust <- scale(te$trust)
+  tweets$tweet <- NULL
+  tweets$tweet_orig <- NULL
+  tweets$hashtag <- NULL
+  
+  testPred <- predict(nn, te) #test
+  testPred<-apply(testPred, c(1), round)
+  confusionMatrix(table(testPred, te$label_factor), dnn=c("Predicted", "Actual"))
+}
+
+```

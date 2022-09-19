@@ -1,16 +1,21 @@
 ---
 title: "Topic Modeling"
 author: "Ada Lazuli"
-date: '2022-07-28'
+date: "2022-07-28"
 output:
-    html_document:
-    toc: true
-    toc_depth: 2
-    code_folding: show
+  pdf_document: default
+  toc: yes
+  toc_depth: 2
+  code_folding: show
+  html_document: null
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r, out.width = '100%', warning=FALSE, collapse=TRUE, class.source = 'fold-hide'}
 library(tidymodels)
 library(tidytext)
 library(ggplot2)
@@ -50,7 +55,9 @@ df$id <- 1:nrow(df)
 # Create Document Term Matrix
 
 ```{r, out.width = '100%'}
-dtm <- df %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, word, n) %>% as.matrix()
+dtm <- df %>% unnest_tokens(word, tweet) %>%
+  count(word, id) %>% cast_dtm(id, word, n) %>%
+  as.matrix()
 ```
 
 The `dtm` matrix is a sparse _document term_ matrix has __`r nrow(dtm)`__ rows and __`r ncol(dtm)`__ columns.
@@ -71,7 +78,7 @@ When interpreting the graphs in this section, it is critical to give attention t
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics From All Tweets", fill = "Topic")
 ```
 
 When LDA was performed with 2 clusters, a clear topic did not emerge.
@@ -79,7 +86,7 @@ When LDA was performed with 2 clusters, a clear topic did not emerge.
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics From All Tweets", fill = "Topic")
 ```
 
 When the cluster K was set to 3, the topics were a little more clear. It seems topic 2 focuses on the situation in India
@@ -87,7 +94,7 @@ When the cluster K was set to 3, the topics were a little more clear. It seems t
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics From All Tweets", fill = "Topic")
 ```
 
 When K was set to 4 the following topics emerged:
@@ -100,7 +107,7 @@ When K was set to 4 the following topics emerged:
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics From All Tweets", fill = "Topic")
 ```
 
 When the cluster number was set to 6 the following topics emerged:
@@ -128,7 +135,7 @@ dtm <- fake %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, w
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics From Fake Tweets", fill = "Topic")
 ```
 
 When the number of clusters is set to 2, it seems that the first topic is focused on covid videos from the hospital while the second is covid policy
@@ -136,7 +143,7 @@ When the number of clusters is set to 2, it seems that the first topic is focuse
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics From Fake Tweets", fill = "Topic")
 ```
 
 For fake tweets and a cluster limit sent to 3, the following topics seemed to emerge:
@@ -148,7 +155,7 @@ For fake tweets and a cluster limit sent to 3, the following topics seemed to em
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics From Fake Tweets", fill = "Topic")
 ```
 
 
@@ -163,7 +170,7 @@ For fake tweets and a cluster limit sent to 4, the following topics seemed to em
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics From Fake Tweets", fill = "Topic")
 ```
 
 For fake tweets and a cluster limit sent to 6, the following topics seemed to emerge:
@@ -190,7 +197,7 @@ dtm <- real %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, w
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics From Real Tweets", fill = "Topic")
 ```
 
 When the number of clusters is set to 2, a clear topic failed to emerge.
@@ -198,7 +205,7 @@ When the number of clusters is set to 2, a clear topic failed to emerge.
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics From Real Tweets", fill = "Topic")
 ```
 
 When the number of clusters is set to 3, topic 2 seems to have a clear focus on India, but the other two are not clear.
@@ -206,7 +213,7 @@ When the number of clusters is set to 3, topic 2 seems to have a clear focus on 
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics From Real Tweets", fill = "Topic")
 ```
 
 For real tweets and a cluster limit sent to 6, the following topics seemed to emerge:
@@ -219,7 +226,7 @@ For real tweets and a cluster limit sent to 6, the following topics seemed to em
 ```{r, out.width = '100%'}
 ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
   geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
-  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics From Real Tweets", fill = "Topic")
 ```
 
 For real tweets and a cluster limit sent to 6, the following topics seemed to emerge:
@@ -233,4 +240,4 @@ For real tweets and a cluster limit sent to 6, the following topics seemed to em
 
 # References
 
-Zvornicanin, E. (2022). _Topic Modeling and Latent Dirichlet Allocation_. Retrieved From: []https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/(https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/)
+Zvornicanin, E. (2022). _Topic Modeling and Latent Dirichlet Allocation_. Retrieved From: [https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/](https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/)
