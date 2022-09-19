@@ -1,0 +1,94 @@
+---
+title: "kmeans clustering"
+author: "Group 3"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library( tm )
+library( plyr )
+library(textstem)
+library( cld3 )
+library( ggplot2 )
+library( cluster )
+
+set.seed(1234)
+```
+
+
+## Load the data
+
+Load the tweet data into a data frame for processing and show a summary of the data.
+
+```{r tweets}
+setwd("../data/")
+tweets <- read.csv( "tweets_prepped.csv", header=TRUE, sep=",", as.is=FALSE )
+str(tweets)
+
+```
+
+## Create a Term Document Matrix for processing
+
+Create a term document matrix.
+
+```{r tdm}
+corpus <- Corpus(VectorSource(tweets$tweet))
+corpusCopy <- corpus
+tdm <- TermDocumentMatrix( corpus )
+inspect(tdm)
+```
+
+Create a document term matrix.
+
+```{r tmd}
+tmd <- DocumentTermMatrix( corpus )
+inspect(tmd)
+findFreqTerms(tmd, lowfreq=400)
+```
+
+Graph term frequency.
+
+```{r term frquency}
+termFrequency <- colSums(as.matrix(tmd))
+termFrequency <- subset(termFrequency, termFrequency>=400)
+df <- data.frame(term=names(termFrequency), freq=termFrequency)
+ggplot(df, aes(x=term, y=freq)) + geom_bar(stat="identity") + xlab("Terms") + ylab("Count") + coord_flip()
+
+```
+
+Generate k-means cluster.
+
+```{r k-means}
+tmd2 <- removeSparseTerms(tmd, sparse=0.95)
+m2 <- as.matrix(tmd2)
+#k <- 4
+#k <- 8
+k <- 16
+kmeansResult <- kmeans(m2, k)
+round(kmeansResult$centers, digits=3)
+```
+
+Look at top words in each cluster.
+
+```{r top-cluster-words}
+for (i in 1:k) {
+   cat(paste("cluster ", i, ":  ", sep=""))
+   s <- sort(kmeansResult$centers[i,], decreasing=T)
+   cat(names(s)[1:10], "\n")
+}
+```
+
+Look at top words in each cluster.
+
+```{r plot-cluster}
+clusplot(tweets, kmeansResult$cluster, color=TRUE, shade=TRUE, labels=1, lines=1)
+```
+
+Compare cluster predictions with actual comparisons.
+
+```{r table-cluster}
+table(tweets$label, kmeansResult$cluster)
+```

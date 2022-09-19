@@ -1,0 +1,120 @@
+---
+title: "Tweet Decision Tree"
+author: "Ada Lazuli"
+date: '2022-07-17'
+output:
+    html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: show
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidymodels)
+library(rattle)
+library("ggfortify")
+set.seed(101011)
+```
+
+# Data Loading
+
+```{r, out.width = '100%'}
+df <- read.csv("../data/enriched_tweet_data.csv")
+# convert the classes to factors
+df$X <- NULL
+df$tweet <- NULL
+df$label <- as.factor(df$label)
+data_partitioned <- initial_split(df, prop = 0.75, strata = label)
+train <- training(data_partitioned)
+test <-  testing(data_partitioned)
+```
+
+# Tree Creation
+
+## First Attempt
+
+### Model Definition
+
+The first attempt involved using all of the available features and not specifying any limitations to the model. The tree is created using the `parsnip` package in `tidymodels`, with the _rpart_ engine and set for classification (Kuhn). The tree was fit on the data, using all of the available columns
+
+```{r, out.width = '100%'}
+tree_template <- decision_tree() %>% set_engine("rpart") %>% set_mode("classification")
+tree_model <- tree_template %>% fit(formula = label ~ ., data =  train)
+fancyRpartPlot(tree_model$fit, caption = "First Decision Tree Attempt")
+```
+
+### Model Results
+
+To assess the performance of the tree, the accuracy, confusion matrix, ROC Curve, and AUC are all captured (Han et al, 2011, p. 49).
+
+```{r, out.width = '100%'}
+# For the confusion Matrix
+predictions <- predict(tree_model, test) %>% mutate(true = test$label)
+# For the plot of the ROC Curve
+predictions_prob <- predict(tree_model, test, type = "prob") %>% bind_cols(test)
+accuracy(data = predictions, estimate = .pred_class, truth = true)
+conf_mat(data = predictions, estimate = .pred_class, truth = true)
+autoplot(roc_curve(data = predictions_prob, estimate = .pred_fake, truth = label)) + ggtitle("ROC For Tweets")
+print(roc_auc(data = predictions_prob, estimate = .pred_fake, truth = label))
+```
+
+
+__Note__: The article written by Brendan Cullen (2021) [here](https://bcullen.rbind.io/post/2020-06-02-tidymodels-decision-tree-learning-in-r/) helped a bit with using features available in the collection packages found in tidymodels. 
+
+
+## Second Attempt
+
+### Optimization
+
+The second attempt is to use a grid search to find the optimal combination of _min_n, tree depth, and cost complexity_ for the model using `tune_grid` from the `tidymodels` set of packages (Kuhn). 
+
+```{r, out.width = '100%'}
+tune_specification <- decision_tree(tree_depth = tune(), min_n = tune(), cost_complexity = tune()) %>% set_mode("classification") %>% set_engine("rpart")
+
+grid_search <- grid_regular(parameters(tune_specification), levels = 10)
+
+tuned <- tune_grid(tune_specification, label ~ ., resample = vfold_cv(train, v = 3), grid = grid_search, metrics = metric_set(accuracy))
+
+autoplot(tuned)
+```
+
+### Using Best Parameters
+
+Following the grid search, the best performing set of parameters were saved and used to create a second model.
+
+```{r, out.width = '100%'}
+optimal_parameters <- select_best(tuned)
+print(optimal_parameters)
+optimal_tree_specification <- finalize_model(tune_specification, optimal_parameters)
+
+optimal_model <- fit(optimal_tree_specification,
+                   label ~ .,
+                   train)
+
+fancyRpartPlot(optimal_model$fit, caption = "Final Decision Tree Attempt")
+```
+
+### Model Performance
+
+To assess the performance of the tree, the accuracy, confusion matrix, ROC Curve, and AUC are all captured (Han et al, 2011, p. 49).
+
+
+```{r, out.width='100%'}
+predictions <- predict(optimal_model, test) %>% mutate(true = test$label)
+predictions_prob <- predict(optimal_model, test, type = "prob") %>% bind_cols(test)
+accuracy(data = predictions, estimate = .pred_class, truth = true)
+conf_mat(data = predictions, estimate = .pred_class, truth = true)
+autoplot(roc_curve(data = predictions_prob, estimate = .pred_fake, truth = label)) + ggtitle("Final Model ROC For Tweets")
+print(roc_auc(data = predictions_prob, estimate = .pred_fake, truth = label))
+```
+
+# References 
+
+Han, Kamber, & Pei. (2011). Chapter 8. Classification: Basic Concepts. Elsevier Science. 
+Kuhn, M. (n.d.) _Model Tuning Via Grid Search_ Retrieved from: https://tune.tidymodels.org/reference/tune_grid.html
+Kuhn, M. (n.d.) _Decision Trees_. Retrieved from: https://parsnip.tidymodels.org/reference/decision_tree.html
+Silge, J. (n.d). _Simple Training/Test Set Splitting_. Retrieved from: https://rsample.tidymodels.org/reference/initial_split.html
+
+

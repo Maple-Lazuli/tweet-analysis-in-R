@@ -1,0 +1,236 @@
+---
+title: "Topic Modeling"
+author: "Ada Lazuli"
+date: '2022-07-28'
+output:
+    html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidymodels)
+library(tidytext)
+library(ggplot2)
+library(reshape2)
+library(forcats)
+library(topicmodels)
+set.seed(101011)
+```
+
+# Helper Functions
+
+```{r}
+lda_pipeline <- function(dtm, k) {
+  # execute the LDA algorithm
+  return (LDA(dtm, k = k,method = "Gibbs",control = list(seed = 101011)) %>%
+  # reshape the matrix to be in better form
+  tidy(matrix = "beta") %>%
+  # Group by topic
+  group_by(topic) %>% 
+  # Take the top ten words with the
+  top_n(10, beta) %>% 
+  # Un group the filtered dataframe
+  ungroup() %>%
+  # Create term2, a factor ordered by word probability
+  mutate(ordered_term = fct_reorder(term, beta))
+  )
+}
+```
+
+# Data Loading
+
+```{r, out.width = '100%'}
+df <- read.csv("../data/tweets_prepped.csv")
+df$id <- 1:nrow(df)
+```
+
+# Create Document Term Matrix
+
+```{r, out.width = '100%'}
+dtm <- df %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, word, n) %>% as.matrix()
+```
+
+The `dtm` matrix is a sparse _document term_ matrix has __`r nrow(dtm)`__ rows and __`r ncol(dtm)`__ columns.
+
+# Latent Dirichlet Allocation (LDA) Topic Modeling
+
+LDA is an unsupervised machine learning approach that recovers topic clusters from text. The procedure is as follows:
+
+1. Specify the number of clusters or topics to recover, $N$
+2. Distribute the topics via a Dirichlet Distribution.$\theta$
+3. Sample the words via a second Dirichlet Distribution, $\beta$
+4. Optimize with Gibbs (Zvornicanin, 2022)
+
+# Topic Modeling Full Dataset
+
+When interpreting the graphs in this section, it is critical to give attention to the Beta $\beta$. A good topic is one where the top 10 terms have a high beta while a poor topic is one where the beta is low.
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+```
+
+When LDA was performed with 2 clusters, a clear topic did not emerge.
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+```
+
+When the cluster K was set to 3, the topics were a little more clear. It seems topic 2 focuses on the situation in India
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+```
+
+When K was set to 4 the following topics emerged:
+
+1. Not really clear. Seems to have an emphasis on India and Trump
+2. Covid information from sources like AMP or the CDC.
+3. Seems to be a topic around the positive covid tests
+4. Seems to be about the covid deaths by state
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+```
+
+When the cluster number was set to 6 the following topics emerged:
+
+1. Seems to be focused on India
+2. Seems to be focused on covid stats put out by the government
+3. Seems to be focused on covid info published by the CDC or AMP
+4. Seems to be covid information by state
+5. Covd deaths
+6. Former Pesident Trump's covid response
+
+# Topic Modeling Fake Tweets
+
+## Data Loading
+
+Subset the data to contain only the fake tweets then create a document term matrix
+
+```{r}
+fake <- df[df$label == "fake",]
+dtm <- fake %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, word, n) %>% as.matrix()
+```
+
+## LDA Modeling
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+```
+
+When the number of clusters is set to 2, it seems that the first topic is focused on covid videos from the hospital while the second is covid policy
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+```
+
+For fake tweets and a cluster limit sent to 3, the following topics seemed to emerge:
+
+1. Indian covid response
+2. Topic 2 seems focused on the the vaccine around the world
+3. Trump's response to the pandemic
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+```
+
+
+For fake tweets and a cluster limit sent to 4, the following topics seemed to emerge:
+
+1. President Trump's covid vaccine and attribution of the virus to China
+2. Covid policy and affect on people
+3. Masks and global covid numbers
+4. The covid situation in India
+
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+```
+
+For fake tweets and a cluster limit sent to 6, the following topics seemed to emerge:
+
+1. The covid mask policy
+2. Covid death rate
+3. President Trump's comparison of covid and the flu?
+4. Covid hospital videos that circulated on facebook
+5. China's covid response
+6. Covid situation in India
+
+
+# Topic Modeling Real Tweets
+
+Subset the data to contain only the real tweets then create a document term matrix
+
+```{r, out.width = '100%'}
+real <- df[df$label == "real",]
+dtm <- real %>% unnest_tokens(word, tweet) %>%count(word, id) %>% cast_dtm(id, word, n) %>% as.matrix()
+```
+
+## LDA Modeling
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 2), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 2 Topics", fill = "Topic")
+```
+
+When the number of clusters is set to 2, a clear topic failed to emerge.
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 3), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4) + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 3 Topics", fill = "Topic")
+```
+
+When the number of clusters is set to 3, topic 2 seems to have a clear focus on India, but the other two are not clear.
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 4), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 4 Topics", fill = "Topic")
+```
+
+For real tweets and a cluster limit sent to 6, the following topics seemed to emerge:
+
+1. The positive covid test data
+2. The covid situation in India
+3. The covid death rate
+4. Covid information from sources like AMP about spread and risk
+
+```{r, out.width = '100%'}
+ggplot(lda_pipeline(dtm, 6), aes(x = ordered_term, y = beta,fill = as.factor(topic))) +
+  geom_col(alpha = 0.4)  + facet_wrap(~ topic, scales = "free") + coord_flip() +
+  labs(y = "Beta", x = "Term", title = "LDA With 6 Topics", fill = "Topic")
+```
+
+For real tweets and a cluster limit sent to 6, the following topics seemed to emerge:
+
+1. The covid test numbers by state
+2. The current covid test numbers
+3. The currenct covid situation in India
+4. Covid information from sources like the CDC or AMP
+5. Covid death rate?
+6. No clue... 
+
+# References
+
+Zvornicanin, E. (2022). _Topic Modeling and Latent Dirichlet Allocation_. Retrieved From: []https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/(https://datascienceplus.com/topic-modeling-and-latent-dirichlet-allocation-lda/)

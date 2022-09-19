@@ -1,0 +1,369 @@
+---
+title: "Exploratory Data Analysis"
+author: "Ada Lazuli"
+date: '2022-07-09'
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: show
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, out.width = '100%', warning=FALSE, collapse=TRUE, class.source = 'fold-hide'}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidytext)
+library(forcats)
+library(textdata)
+```
+# Background
+
+The data set was retrieved from [COVID19 Fake News Dataset NLP](https://www.kaggle.com/datasets/elvinagammed/covid19-fake-news-dataset-nlp) and consists of tweets regarding COVID-19 news that are classified as _real_ or _fake_. Consequently, this labeled data is ideal for developing a classification model to take in a tweet, pass its text through a function, and return a classification on whether the tweet contains real or fake news regarding covid-19. __NOTE__: There are two assumptions with the input data:
+1. The tweet contains news, either real or fake
+2. The tweet is concerning covid-19.
+
+
+The source contained the following files:
+
+1. __Constraint_Test.csv__ - A comma separated file of 2140 tweets lacking classification. 
+2. __Constraint_Test.xlsx__ - A MS-Excel formatted file of 2140 tweets lacking classification and appears to be identical to the test CSV in terms of text content.
+3. __Constraint_Train.csv__ - A comma separated file of 6420 tweets, each with a classification of real or fake.
+4. __Constraint_Train.xlsx__ - A MS-Excel formatted file of 6420 tweets, each with a classification of real or fake, identical to the train CSV.
+5. __Constraint_Val.csv__ - A comma separated file of 2140 tweets with classification. Initially it is not clear if the tweets in this file are duplicates of those found in the Test files.
+6. __English_test_with_labels_.csv__ - A comma separated file of 2140 tweets with classification that appear to be duplicates of those found in the Test files.
+7. __test_ernie2.0_results.csv__ - A comma separated file of 2140 rows that contain classification probabilities for whether the tweet in the Test files is real or fake. The file contains results after training ERNIE (Enhanced Representation Through Knowledge Integration) 2.0 on the training data (diptamath, 2021). Additional information on ERNIE 2,0 can be found [here](https://github.com/diptamath/covid_fake_news).
+
+
+## Initial Inspection of the data.
+
+This analysis is performed on a system with the following specifications:
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+sessionInfo()
+```
+
+Due to the analysis being on a linux operating system and the content of the excel files seeming to be duplicated, __Constraint_Test.xlsx__ and __Constraint_Train.xlsx__ will be ignored. (Reading MS Excel files has difficult to resolve dependencies on linux)
+
+
+## Constraint Test [CSV]
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+cnst_test <- read.csv("../data/Constraint_Test.csv")
+glimpse(cnst_test)
+```
+
+The file appears to have `r ncol(cnst_test)` columns and `r nrow(cnst_test)` rows. The first column appears to be an ID that uniquely identifies each tweet, as it has `r length(unique(cnst_test$id))` unique values.
+
+
+The tweet column appears to be just the text of various tweets. It is important to note that these tweets seem to be messy in that they have both non-alphanumeric characters present in the strings, as well as, pointers such as "@<username>" and web addresses. To glean a sense of the variability in the length of the tweets, character counts will be uses initially:
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- cnst_test %>% mutate(len = nchar(tweet))
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Test Tweets", x = "Number of Characters", y = "Occurences")
+count_df <- cnst_test %>% mutate(len = nchar(tweet)) %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Test Tweets, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+```
+
+There appears to a few tweets that have character counts outside 3 standard deviations of the mean. The table below details the summary statistics for the character lengths of the test set.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+summary((cnst_test %>% mutate(len = nchar(tweet)))$len)
+```
+
+
+## Constraint Train [CSV]
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+cnst_train <- read.csv("../data/Constraint_Train.csv")
+glimpse(cnst_train)
+```
+
+The file appears to have `r ncol(cnst_train)` columns and `r nrow(cnst_train)` rows. The first column appears to be an ID that uniquely identifies each tweet, as it has `r length(unique(cnst_train$id))` unique values.
+
+
+The tweet column appears to be just the text of tweets, just like the test file
+
+### Character Inspection
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- cnst_train %>% mutate(len = nchar(tweet))
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Train Tweets", x = "Number of Characters", y = "Occurences")
+count_df <- cnst_train %>% mutate(len = nchar(tweet)) %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Train Tweets, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+ggplot(count_df, aes(x = len, fill = label)) + geom_histogram(alpha = 0.3) + labs(title = "Histogram Of Character Counts By Class, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+
+
+# merge the cnst_train and cnst_test to look at their similarity
+
+temp1 <- cnst_train %>% mutate(len = nchar(tweet)) %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+temp1$source <- "Train"
+temp2 <- cnst_test %>% mutate(len = nchar(tweet)) %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+temp2$source <- "Test"
+temp2$label <- "NA"
+ggplot(rbind(temp1,temp2), aes(x = len, fill = source)) + geom_histogram( alpha = 0.3) + labs(title = "Comparison of Train and Test Tweet Lengths, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+```
+
+There appears to a few tweets that have character counts outside 3 standard deviations of the mean and there is a difference in the distribution of the number of characters in _real_ and _fake_ tweets. Additionally, it appears that the training and test set have very similar distributions in terms of length.
+
+ The table below details the summary statistics for the character lengths of the training set.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+summary((cnst_train %>% mutate(len = nchar(tweet)))$len)
+```
+
+
+### Class Balance
+
+The training data contains a column title __label__ that identifies whether the tweet contains real or fake news.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- cnst_train %>% count(label)
+ggplot(count_df, aes(x = label, y = n, fill = label)) + geom_col() + labs(title = "Comparison Of Real and Fake Occurences In Training Data", x = "Label", y = "Occurences")
+```
+
+It appears that class ratio for real and fake tweets is  is balanced. `r sum(cnst_train$label == "fake") / nrow(cnst_train) * 100` % of the data training tweets are _fake_, while the other `r sum(cnst_train$label == "real") / nrow(cnst_train) * 100` % are real.
+
+
+## Constraint Val [CSV]
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+cnst_val <- read.csv("../data/excess_files/Constraint_Val.csv")
+glimpse(cnst_val)
+```
+
+The file appears to have `r ncol(cnst_val)` columns and `r nrow(cnst_val)` rows. The first column appears to be an ID that uniquely identifies each tweet, as it has `r length(unique(cnst_val$id))` unique values.
+
+### Does Constraint Val match Constraint Test?
+
+Given the similarity to __Constant_Test.csv__, a test is executed below to determine if the two files are duplicates:
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+cnst_val %>% inner_join(cnst_test, by = "tweet")
+```
+
+It appears that __Constraint_Test__ and __Constraint_Val__ do not have a single matching tweet.
+
+### Character Length 
+
+This section studies the distribution of character lengths.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- cnst_val %>% mutate(len = nchar(tweet))
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Val Tweets", x = "Number of Characters", y = "Occurences")
+count_df <- cnst_val %>% mutate(len = nchar(tweet)) %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+ggplot(count_df, aes(x = len)) + geom_histogram() + labs(title = "Histogram Of Character Counts In Val Tweets, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+ggplot(count_df, aes(x = len, fill = label)) + geom_histogram(alpha = 0.3) + labs(title = "Histogram Of Character Counts By Class, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+```
+
+The distribution of character lengths appears to be similar to the the other files. It is also apparent that there seems to be a difference between the lengths of characters when split by _Real_ or _Fake_
+
+
+### Class Balance
+
+The validation data contains a column title __label__ that identifies whether the tweet contains real or fake news.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- cnst_val %>% count(label)
+ggplot(count_df, aes(x = label, y = n, fill = label)) + geom_col() + labs(title = "Comparison Of Real and Fake Occurences In Validation Data", x = "Label", y = "Occurences")
+```
+
+It appears that class ratio for real and fake tweets is  is balanced. `r sum(cnst_val$label == "fake") / nrow(cnst_val) * 100` % of the data training tweets are _fake_, while the other `r sum(cnst_val$label == "real") / nrow(cnst_val) * 100` % are real.
+
+The split of labels in the __validation__ set seems to match the split of labels in the __training set__
+
+
+## English Test With Labels [CSV]
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+eng_test <- read.csv("../data/english_test_with_labels.csv")
+
+glimpse(eng_test)
+```
+
+The file appears to have `r ncol(eng_test)` columns and `r nrow(eng_test)` rows. The first column appears to be an ID that uniquely identifies each tweet, as it has `r length(unique(eng_test$id))` unique values.
+
+### Does It Match Constraint Test?
+
+Given the similarity to __Constant_Test.csv__, a test is executed below to determine if the two files are duplicates:
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+test <- eng_test %>% inner_join(cnst_test, by = "tweet")
+```
+
+Given that the inner join had `r nrow(test)` and __Constraint_Test__ had `r nrow(cnst_test)`. It appears that this file is a copy!
+
+### Class Balance
+
+The test data contains a column title __label__ that identifies whether the tweet contains real or fake news.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- eng_test %>% count(label)
+ggplot(count_df, aes(x = label, y = n, fill = label)) + geom_col() + labs(title = "Comparison Of Real and Fake Occurences In Test Data", x = "Label", y = "Occurences")
+```
+
+It appears that class ratio for real and fake tweets is  is balanced. `r sum(eng_test$label == "fake") / nrow(eng_test) * 100` % of the data training tweets are _fake_, while the other `r sum(eng_test$label == "real") / nrow(eng_test) * 100` % are real.
+
+
+## Test ERNIE2.0 Results [CSV]
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+ernie <- read.csv("../data/excess_files/test_ernie2.0_results.csv")
+glimpse(ernie)
+```
+
+
+The file appears to have `r ncol(eng_test)` columns and `r nrow(eng_test)` rows. It seems that this file contains the results of passing __Constraint_Test__ through ERNIE 2.0.
+
+
+### Confusion Matrix
+
+|                          | Test Real                                                                        | Test Fake                                                                         |
+| :----:                   |    :----:                                                                        |     :----:                                                                        |
+| __Classified Real__      |`r sum((ernie$Model4_class0  > ernie$Model4_class1) & (eng_test$label == "real"))`|`r sum((ernie$Model4_class0  > ernie$Model4_class1) & (eng_test$label == "fake"))` |
+| __Classified Fake__      |`r sum((ernie$Model4_class0  < ernie$Model4_class1) & (eng_test$label == "real"))`|`r sum((ernie$Model4_class0  < ernie$Model4_class1) & (eng_test$label == "fake"))` |
+
+ERNIE 2.0 performed very well and had an accuracy of __`r (sum((ernie$Model4_class0  > ernie$Model4_class1) & (eng_test$label == "real")) + sum((ernie$Model4_class0  < ernie$Model4_class1) & (eng_test$label == "fake"))) /nrow(ernie) *100`__%.
+
+
+# Data Cleaning
+
+The data was cleaned and compiled into a single dataset provided by Winfrey "John" Johnson. 
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+tweets <- read.csv("../data/tweets_prepped.csv")
+```
+
+
+# Exploration
+
+
+## Revisit Character Lengths Post Cleaning
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- tweets %>% mutate(len = nchar(tweet))  %>% filter(len < 3 * sd(len) + mean(len) ) %>% filter(len > mean(len) - 3 * sd(len) ) 
+ggplot(count_df, aes(x = len, fill = label)) + geom_histogram(alpha = 0.3) + labs(title = "Histogram Of Character Counts By Class, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+```
+
+It seems that the difference between real and fake is less pronounced post cleaning, however, real tweets seem to be affected the most. This cold be an indicator that real tweets tend to use stopwords, symbols, or URLs more often.
+
+
+## Word Length Comparison
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- tweets %>% mutate(words = str_count(tweet, " "))  %>% filter(words < 3 * sd(words) + mean(words) ) %>% filter(words > mean(words) - 3 * sd(words))
+ggplot(count_df, aes(x = words, fill = label)) + geom_histogram(alpha = 0.3) + labs(title = "Histogram Of Word Counts By Class, Filtered within 3 STDs", x = "Number of Characters", y = "Occurences")
+```
+
+It seems as though _fake_ tweets have a tendency for shorter tweets.
+
+## Looking at URLs
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- tweets %>% filter(grepl('http', tweet)) %>% count(label) %>% inner_join(tweets %>% count(label), by = "label") %>% mutate(ratio = n.x/n.y)
+ggplot(count_df, aes(x = label, y = ratio, fill = label)) + geom_col(alpha = 0.3) + labs(title = "Normalized Comparison of URL Occurrences", x = "Label", y = "Percentage With URLs")
+```
+
+It seems that URLs are significantly more common in _real_ tweets compared to _fake_ tweets,
+
+## Top 10 Words By Label
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- tweets %>% unnest_tokens(term, tweet) %>% count(term, label) %>% group_by(label) %>% top_n(10, n) %>% ungroup() %>% mutate(sorted = fct_reorder(term, n))
+ggplot(count_df, aes(x = sorted, y = n, fill = label)) + geom_col() + facet_wrap(~ label, scales = "free_y") + coord_flip() + labs(title = "Top 10 Words By Label", x = "Word", y = "Occurences")
+```
+
+It is interesting to note that __Trump__ is one of the top 10 words for fake news tweets. This could lend credence to political motivations for fake news tweets in the data. Again, __HTTPS__ is very prominent for real tweets, but it is also very common in fake tweets. 
+
+## Sentiment Analysis
+
+For sentiment analysis, the individual words will need to be remain unnested. The next code block creates a new dataframe of unnested tweets for sentiment analysis.
+
+A few different corpora are used for sentiment analysis, details on the corpora available in `tidytext` is well documented [here](https://www.tidytextmining.com/sentiment.html#the-sentiments-datasets).
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+unnested_tweets <- tweets %>% unnest_tokens(word, tweet) # note: using word instead of term to help with inner joins later :)
+```
+
+### Using the bing Corpus
+
+A glimpse of the `bing` corpus is provide below. It has `r length(unique(get_sentiments("bing")$word))` words with `r length(unique(get_sentiments("bing")$sentiment))` possible sentiment classifications.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+glimpse(get_sentiments("bing"))
+table(get_sentiments("bing")$sentiment)
+```
+
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- unnested_tweets %>% inner_join(get_sentiments("bing")) %>% count(label, sentiment) 
+ggplot(count_df, aes(x = sentiment, y = n, fill = label)) + geom_col() + facet_wrap(~ label, scale = "free_y") + coord_flip() + labs(title = "Basic Sentiment Analysis With Bing", x = "Sentiment", y ="Occurences")
+```
+
+It seems that fake tweets are more likely to be negative than positive, but the distinction seems weak.
+
+### Using the afinn Corpus
+
+A glimpse of the `afinn` corpus is provide below. It has `r length(unique(get_sentiments("afinn")$word))` words and provides an integer value of positive or negative. __NOTE__: If this line errors out, open an interactive R session, run `library(tidytext)` followed by `get_sentiments("afinn")`. The prompt to download the corpus is restricted to an interactive mode.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+glimpse(get_sentiments("afinn"))
+```
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- unnested_tweets %>% inner_join(get_sentiments("afinn")) %>% group_by(label) %>% summarise(sentiment = mean(value)) 
+ggplot(count_df, aes(x = label, y = sentiment, fill = label)) + geom_col() + coord_flip() + labs(title = "Average Positive Sentiment Analysis With Afinn", x = "Label", y ="Sentiment")
+```
+
+Again, fake tweets seem to have a strong negative sentiment.
+
+
+### Using the loughran Corpus
+
+A glimpse of the `loughran` corpus is provide below. It has `r length(unique(get_sentiments("loughran")$word))` words with `r length(unique(get_sentiments("loughran")$sentiment))` possible sentiment classifications.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+glimpse(get_sentiments("loughran"))
+table(get_sentiments("loughran")$sentiment)
+```
+
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- unnested_tweets %>% inner_join(get_sentiments("loughran")) %>% count(label, sentiment) 
+ggplot(count_df, aes(x = sentiment, y = n, fill = label)) + geom_col() + facet_wrap(~ label, scale = "free_y") + coord_flip() + labs(title = "Basic Sentiment Analysis With Loughran", x = "Sentiment", y ="Occurences")
+```
+
+The loughran corpus seems to show some differences between the types of tweets. Real tweets seem to have more `uncertainty` and are `litigious` while fake tweets are more `constraining`
+
+
+### Using the nrc Corpus
+
+A glimpse of the `nrc` corpus is provide below. It has `r length(unique(get_sentiments("nrc")$word))` words with `r length(unique(get_sentiments("nrc")$sentiment))` possible sentiment classifications.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+glimpse(get_sentiments("nrc"))
+table(get_sentiments("nrc")$sentiment)
+```
+
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+count_df <- unnested_tweets %>% inner_join(get_sentiments("nrc")) %>% count(label, sentiment) 
+ggplot(count_df, aes(x = sentiment, y = n, fill = label)) + geom_col() + facet_wrap(~ label, scale = "free_y") + coord_flip() + labs(title = "Basic Sentiment Analysis With NRC", x = "Sentiment", y ="Occurences")
+```
+
+
+It is a little more difficult to visually see the differences with `nrc`, but it appears that the pronounced differences between real and fake is positiviy and anticipation. 
+
+
+# References 
+
+Aghammadzada, E. (2021). _COVID19 Fake News Dataset NLP_ . Retrieved from: https://www.kaggle.com/datasets/elvinagammed/covid19-fake-news-dataset-nlp
+
+Baidu Research. (2018). _Baidu's Optimized ERNIE Achieves State-of-the-Art Results in NLP Tasks_. Retrieved from: http://research.baidu.com/Blog/index-view?id=121
+
+diptamath. (2021). _COVID19 Fake News Detection in English_. Retrieved from: https://github.com/diptamath/covid_fake_news
+
+Silge, J. & Robinson, D. (2022). _Sentiment analysis with tidy data_ . Retrieved from: https://www.tidytextmining.com/sentiment.html#the-sentiments-datasets
+
+
+

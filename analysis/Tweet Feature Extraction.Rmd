@@ -1,0 +1,146 @@
+---
+title: "Tweet Feature Extraction"
+author: "Ada Lazuli"
+date: '2022-07-17'
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, out.width = '100%', warning=FALSE, collapse=TRUE, class.source = 'fold-hide'}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(stringr)
+library(tidytext)
+library(forcats)
+library(textdata)
+```
+
+# Data Loading
+
+Load the prepped data compiled by Winfrey Johnson.
+
+```{r,  out.width = '100%', warning=FALSE, message=FALSE}
+df <- read.csv("../data/tweets_prepped.csv")
+datatable(df)
+```
+
+# Data Enrichment 
+
+To give the decision tree more features to work with, the data will be enriched to include:
+1. A flag on whether HTTP is present
+2. A numeric designation on overall sentiment using `afinn`
+3. A other sentiment labels from the `nrc` corpus.
+
+## Add Length
+
+Use the `mutate` verb to add the length of the tweet to the dataframe
+
+```{r,  out.width = '100%', warning=FALSE, message=FALSE}
+df <- df %>% mutate(length = nchar(tweet))
+```
+
+## Flag HTTP
+
+Use `mutate` to find the http keyword in the tweet text then convert that logical to an integer.
+
+```{r,  out.width = '100%', warning=FALSE, message=FALSE}
+df <- df %>% mutate(http = grepl("http", tweet)) %>% mutate(http = as.integer(http))
+```
+
+## Add Integer Sentiment
+
+First, create a function that calculate the sentiment positivity value for one tweet using `afinn`. Then apply that function over all of the tweets in the dataframe.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+calc_afinn_sentiment <- function(df){
+  df$sentiment_afinn <- 0
+  for (i in 1 : nrow(df)){
+    # extract the row
+    temp <- df[i,]
+    # un nest the row to join with afinn then calculate the average sentiment
+    temp <- temp %>% unnest_tokens(word, tweet) %>% inner_join(get_sentiments("afinn"), by = "word") %>% group_by(label) %>% summarize(sentiment = mean(value))
+    # sometimes the sentiment is not returned if the intersection of the sets is empty, so check for this below
+    if (length(temp$sentiment) > 0){
+      df[i,]$sentiment_afinn <- temp$sentiment[1] 
+    }
+  }
+  return (df)
+}
+df <- calc_afinn_sentiment(df)
+```
+
+
+## Add Sentiement Labels
+
+Similar to the previous section, create a function to add sentiment labels to each row of the dataframe using the `nrc` dataset.
+
+```{r, out.width = '100%', warning=FALSE, message=FALSE}
+
+find_nrc_sentiment <- function(df){
+  # Add empty columns to the dataset for each label prior to calculation
+  nrc_sentiments <- c("anger", "anticipation", "disgust",  "fear", "joy", "negative",  "positive", "sadness", "surprise",  "trust")
+  for (x in 1:length(nrc_sentiments)){
+    df[nrc_sentiments[x]] <- 0
+  }
+  
+    for (i in 1 : nrow(df)){
+    # extract the row
+    temp <- df[i,]
+    # un nest the row to join with nrc then count the occurrences of each sentiment
+    temp <- temp %>% unnest_tokens(word, tweet) %>% inner_join(get_sentiments("nrc"), by = "word") %>% count(sentiment)
+    # sometimes the sentiment is not returned if the intersection of the sets is empty, so check for this below
+    if (nrow(temp) > 0){
+      for (x in 1:nrow(temp)){
+        df[i,][temp[x,]$sentiment] <- temp[x,]$n
+      }
+    }
+  }
+  return(df)
+}
+df <- find_nrc_sentiment(df)
+```
+
+## Save Enriched Dataset
+
+Finally, save the enriched dataset as a CSV.
+
+```{r}
+write.csv(df, "../data/enriched_tweet_data.csv")
+datatable(df)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

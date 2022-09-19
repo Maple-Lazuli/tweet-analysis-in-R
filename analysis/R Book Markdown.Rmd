@@ -1,0 +1,47 @@
+---
+title: "R and Data Mining"
+author: "Ada Lazuli"
+date: '2022-07-17'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preliminary - Packages and Data
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(tm)
+```
+
+
+```{r}
+df <- read.csv("../data/tweets_prepped.csv")
+```
+
+# Chapter 10 - Text Mining
+
+## 10.2 Transforming Text
+
+The first step in this section was to the twitter data to a dataframe, however, this is something that was already achieved in the preliminary step.
+
+```{r}
+datatable(df)
+```
+
+The next step was to convert the text to a corpus. The text used the `tm` package to achieve this.
+
+```{r}
+myCorpus <- Corpus(VectorSource(df$tweet))
+```
+
+Then, the text was converted to lower case by using the builtin function `tolower()` and the `tm_map` function from the `tm` package.
+
+```{r}
+myCorpus <- tm_map(myCorpus, tolower)
+```
